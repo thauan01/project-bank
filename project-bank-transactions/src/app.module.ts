@@ -10,15 +10,18 @@ import { DI_TRANSACTION_REPOSITORY, DI_USER_REPOSITORY } from './config/containe
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ 
+      isGlobal: true,
+      envFilePath: '../.env', // Aponta para o .env do diretório pai
+    }),
     DatabaseModule,
     ClientsModule.register([
       {
         name: 'RABBITMQ_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: ['amqp://admin:admin@localhost:5672'],
-          queue: 'bank-transaction-to-client-queue',
+          urls: [process.env.RABBITMQ_URL || 'amqp://admin:admin@localhost:5672'],
+          queue: process.env.RABBITMQ_QUEUE || 'bank-transaction-to-client-queue',
           queueOptions: {
             durable: true,
           },

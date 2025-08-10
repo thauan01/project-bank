@@ -1,31 +1,78 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
-import { IUserRepository } from '../interface';
+import { IUserRepository, UserData, OperationResult, UpdateResult } from '../interface';
 import { User } from '../entity';
-
-export interface UpdateUserData {
-  name?: string;
-  email?: string;
-  address?: string;
-  agency?: string;
-  accountNumber?: string;
-}
-
-export interface UpdateUserResult {
-  success: boolean;
-  message: string;
-  updatedFields: string[];
-  user: User;
-}
+import { DI_USER_REPOSITORY } from "../../config/container-names.config";
 
 @Injectable()
 export class ClientsService {
   constructor(
-    @Inject('USER_REPOSITORY')
+    @Inject(DI_USER_REPOSITORY)
     private readonly userRepository: IUserRepository
   ) {}
 
-  async addClient(clientData: Partial<User>): Promise<User> {
-    return await this.userRepository.create(clientData);
+  async createClient(createData: UserData): Promise<OperationResult> {
+    // Validação dos dados obrigatórios
+    if (!createData.name || createData.name.trim() === '') {
+      throw new BadRequestException('Nome é obrigatório');
+    }
+    
+    if (!createData.email || createData.email.trim() === '') {
+      throw new BadRequestException('Email é obrigatório');
+    }
+    
+    if (!createData.document || createData.document.trim() === '') {
+      throw new BadRequestException('Documento é obrigatório');
+    }
+
+    // Validações de regras de negócio
+    this.validateCreateData(createData);
+
+    // Verifica se email já existe
+    const emailExists = await this.userRepository.findByEmail(createData.email);
+    if (emailExists) {
+      throw new BadRequestException('Este email já está sendo usado por outro cliente');
+    }
+
+    // Verifica se documento já existe
+    const documentExists = await this.userRepository.findByDocument(createData.document);
+    if (documentExists) {
+      throw new BadRequestException('Este documento já está sendo usado por outro cliente');
+    }
+
+    // Define valores padrão para dados bancários se não fornecidos
+    const userData: Partial<User> = {
+      ...createData,
+      balance: 0,
+      isActive: true,
+      agency: createData.bankingDetails.agency || '0001'
+    };
+
+    // Se não foi fornecido accountNumber, será gerado automaticamente pelo banco
+    if (!createData.bankingDetails.accountNumber) {
+      // O accountNumber será gerado após a criação usando o ID
+      delete userData.accountNumber;
+    }
+
+    // Cria o cliente
+    const newClient = await this.userRepository.create(userData);
+    
+    // Se não foi fornecido accountNumber, atualiza com um baseado no ID
+    if (!createData.bankingDetails.accountNumber && newClient.id) {
+      const generatedAccountNumber = newClient.id.slice(-8).padStart(8, '0');
+      const updatedClient = await this.userRepository.update(newClient.id, { 
+        accountNumber: generatedAccountNumber 
+      });
+      
+      if (updatedClient) {
+        newClient.accountNumber = generatedAccountNumber;
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Cliente criado com sucesso',
+      user: newClient
+    };
   }
 
   async getClients(): Promise<User[]> {
@@ -46,7 +93,7 @@ export class ClientsService {
     return client;
   }
 
-  async updateClient(id: string, updateData: UpdateUserData): Promise<UpdateUserResult> {
+  async updateClient(id: string, updateData: UserData): Promise<UpdateResult> {
     // Validação do ID
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
@@ -74,6 +121,14 @@ export class ClientsService {
       }
     }
 
+    // Verifica se documento já existe em outro cliente
+    if (updateData.document) {
+      const documentExists = await this.userRepository.findByDocument(updateData.document);
+      if (documentExists && documentExists.id !== id) {
+        throw new BadRequestException('Este documento já está sendo usado por outro cliente');
+      }
+    }
+
     // Atualiza o cliente
     const updatedClient = await this.userRepository.update(id, updateData);
     if (!updatedClient) {
@@ -90,7 +145,7 @@ export class ClientsService {
     };
   }
 
-  async updateProfilePicture(id: string, profilePicture: string): Promise<UpdateUserResult> {
+  async updateProfilePicture(id: string, profilePicture: string): Promise<UpdateResult> {
     // Validação do ID
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
@@ -124,7 +179,7 @@ export class ClientsService {
     };
   }
 
-  private validateUpdateData(updateData: UpdateUserData): void {
+  private validateUpdateData(updateData: UserData): void {
     // Validação do nome
     if (updateData.name !== undefined) {
       if (!updateData.name || updateData.name.trim().length < 2) {
@@ -146,6 +201,21 @@ export class ClientsService {
       }
     }
 
+    // Validação do documento
+    if (updateData.document !== undefined) {
+      if (!updateData.document || updateData.document.trim().length < 11) {
+        throw new BadRequestException('Documento deve ter pelo menos 11 caracteres');
+      }
+      if (updateData.document.length > 20) {
+        throw new BadRequestException('Documento não pode ter mais de 20 caracteres');
+      }
+      // Remove caracteres não numéricos para validação
+      const documentNumbers = updateData.document.replace(/\D/g, '');
+      if (documentNumbers.length < 11) {
+        throw new BadRequestException('Documento deve conter pelo menos 11 dígitos');
+      }
+    }
+
     // Validação do endereço
     if (updateData.address !== undefined) {
       if (updateData.address && updateData.address.length > 255) {
@@ -154,17 +224,74 @@ export class ClientsService {
     }
 
     // Validação da agência
-    if (updateData.agency !== undefined) {
-      if (updateData.agency && !/^\d{4}$/.test(updateData.agency)) {
+    if (updateData.bankingDetails?.agency !== undefined) {
+      if (updateData.bankingDetails.agency && !/^\d{4}$/.test(updateData.bankingDetails.agency)) {
         throw new BadRequestException('Agência deve conter exatamente 4 dígitos');
       }
     }
 
     // Validação do número da conta
-    if (updateData.accountNumber !== undefined) {
-      if (updateData.accountNumber && !/^\d{6,12}$/.test(updateData.accountNumber)) {
+    if (updateData.bankingDetails?.accountNumber !== undefined) {
+      if (updateData.bankingDetails.accountNumber && !/^\d{6,12}$/.test(updateData.bankingDetails.accountNumber)) {
         throw new BadRequestException('Número da conta deve conter entre 6 e 12 dígitos');
       }
+    }
+
+    // Validação da foto de perfil
+    if (updateData.profilePicture !== undefined && updateData.profilePicture) {
+      this.validateProfilePicture(updateData.profilePicture);
+    }
+  }
+
+  private validateCreateData(createData: UserData): void {
+    // Validação do nome
+    if (!createData.name || createData.name.trim().length < 2) {
+      throw new BadRequestException('Nome deve ter pelo menos 2 caracteres');
+    }
+    if (createData.name.length > 100) {
+      throw new BadRequestException('Nome não pode ter mais de 100 caracteres');
+    }
+
+    // Validação do email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!createData.email || !emailRegex.test(createData.email)) {
+      throw new BadRequestException('Email deve ter um formato válido');
+    }
+    if (createData.email.length > 100) {
+      throw new BadRequestException('Email não pode ter mais de 100 caracteres');
+    }
+
+    // Validação do documento
+    if (!createData.document || createData.document.trim().length < 11) {
+      throw new BadRequestException('Documento deve ter pelo menos 11 caracteres');
+    }
+    if (createData.document.length > 20) {
+      throw new BadRequestException('Documento não pode ter mais de 20 caracteres');
+    }
+    // Remove caracteres não numéricos para validação
+    const documentNumbers = createData.document.replace(/\D/g, '');
+    if (documentNumbers.length < 11) {
+      throw new BadRequestException('Documento deve conter pelo menos 11 dígitos');
+    }
+
+    // Validação do endereço
+    if (createData.address !== undefined && createData.address && createData.address.length > 255) {
+      throw new BadRequestException('Endereço não pode ter mais de 255 caracteres');
+    }
+
+    // Validação da agência
+    if (createData.bankingDetails?.agency !== undefined && createData.bankingDetails?.agency && !/^\d{4}$/.test(createData.bankingDetails?.agency)) {
+      throw new BadRequestException('Agência deve conter exatamente 4 dígitos');
+    }
+
+    // Validação do número da conta
+    if (createData.bankingDetails?.accountNumber !== undefined && createData.bankingDetails?.accountNumber && !/^\d{6,12}$/.test(createData.bankingDetails?.accountNumber)) {
+      throw new BadRequestException('Número da conta deve conter entre 6 e 12 dígitos');
+    }
+
+    // Validação da foto de perfil, se fornecida
+    if (createData.profilePicture !== undefined && createData.profilePicture) {
+      this.validateProfilePicture(createData.profilePicture);
     }
   }
 

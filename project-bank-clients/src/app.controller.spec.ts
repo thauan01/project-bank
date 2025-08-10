@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AppController } from './adapter/controller/clients.controller';
+import { ClientsController } from './adapter/controller/clients.controller';
 import { ClientsService } from './domain/service/clients.service';
 
 describe('AppController', () => {
-  let appController: AppController;
+  let appController: ClientsController;
 
   beforeEach(async () => {
     const mockClientsService = {
@@ -13,7 +13,7 @@ describe('AppController', () => {
     };
 
     const app: TestingModule = await Test.createTestingModule({
-      controllers: [AppController],
+      controllers: [ClientsController],
       providers: [
         {
           provide: ClientsService,
@@ -22,7 +22,7 @@ describe('AppController', () => {
       ],
     }).compile();
 
-    appController = app.get<AppController>(AppController);
+    appController = app.get<ClientsController>(ClientsController);
   });
 
   describe('AppController', () => {
