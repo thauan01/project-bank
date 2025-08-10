@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
+import { IUserRepository } from '../interface';
+import { User } from '../entity';
 
 export interface UpdateUserData {
   name?: string;
@@ -12,27 +14,30 @@ export interface UpdateUserResult {
   success: boolean;
   message: string;
   updatedFields: string[];
-  user: any;
+  user: User;
 }
 
 @Injectable()
 export class ClientsService {
-  private clients: any[] = [];
+  constructor(
+    @Inject('USER_REPOSITORY')
+    private readonly userRepository: IUserRepository
+  ) {}
 
-  addClient(client: any): void {
-    this.clients.push(client);
+  async addClient(clientData: Partial<User>): Promise<User> {
+    return await this.userRepository.create(clientData);
   }
 
-  getClients(): any[] {
-    return this.clients;
+  async getClients(): Promise<User[]> {
+    return await this.userRepository.findAll();
   }
 
-  getClientById(id: string): any {
+  async getClientById(id: string): Promise<User> {
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
     }
 
-    const client = this.clients.find(client => client.id === id);
+    const client = await this.userRepository.findById(id);
     
     if (!client) {
       throw new NotFoundException(`Cliente com ID ${id} não encontrado`);
@@ -41,7 +46,7 @@ export class ClientsService {
     return client;
   }
 
-  updateClient(id: string, updateData: UpdateUserData): UpdateUserResult {
+  async updateClient(id: string, updateData: UpdateUserData): Promise<UpdateUserResult> {
     // Validação do ID
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
@@ -53,8 +58,8 @@ export class ClientsService {
     }
 
     // Verifica se o cliente existe
-    const clientIndex = this.clients.findIndex(client => client.id === id);
-    if (clientIndex === -1) {
+    const existingClient = await this.userRepository.findById(id);
+    if (!existingClient) {
       throw new NotFoundException(`Cliente com ID ${id} não encontrado`);
     }
 
@@ -63,21 +68,17 @@ export class ClientsService {
 
     // Verifica se email já existe em outro cliente
     if (updateData.email) {
-      const emailExists = this.clients.find(
-        client => client.id !== id && client.email === updateData.email
-      );
-      if (emailExists) {
+      const emailExists = await this.userRepository.findByEmail(updateData.email);
+      if (emailExists && emailExists.id !== id) {
         throw new BadRequestException('Este email já está sendo usado por outro cliente');
       }
     }
 
     // Atualiza o cliente
-    const originalClient = { ...this.clients[clientIndex] };
-    this.clients[clientIndex] = {
-      ...this.clients[clientIndex],
-      ...updateData,
-      updatedAt: new Date()
-    };
+    const updatedClient = await this.userRepository.update(id, updateData);
+    if (!updatedClient) {
+      throw new NotFoundException(`Erro ao atualizar cliente com ID ${id}`);
+    }
 
     const updatedFields = Object.keys(updateData);
 
@@ -85,11 +86,11 @@ export class ClientsService {
       success: true,
       message: 'Dados do cliente atualizados com sucesso',
       updatedFields,
-      user: this.clients[clientIndex]
+      user: updatedClient
     };
   }
 
-  updateProfilePicture(id: string, profilePicture: string): UpdateUserResult {
+  async updateProfilePicture(id: string, profilePicture: string): Promise<UpdateUserResult> {
     // Validação do ID
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
@@ -101,8 +102,8 @@ export class ClientsService {
     }
 
     // Verifica se o cliente existe
-    const clientIndex = this.clients.findIndex(client => client.id === id);
-    if (clientIndex === -1) {
+    const existingClient = await this.userRepository.findById(id);
+    if (!existingClient) {
       throw new NotFoundException(`Cliente com ID ${id} não encontrado`);
     }
 
@@ -110,17 +111,16 @@ export class ClientsService {
     this.validateProfilePicture(profilePicture);
 
     // Atualiza a foto de perfil
-    this.clients[clientIndex] = {
-      ...this.clients[clientIndex],
-      profilePicture,
-      updatedAt: new Date()
-    };
+    const updatedClient = await this.userRepository.update(id, { profilePicture } as any);
+    if (!updatedClient) {
+      throw new NotFoundException(`Erro ao atualizar foto de perfil do cliente com ID ${id}`);
+    }
 
     return {
       success: true,
       message: 'Foto de perfil atualizada com sucesso',
       updatedFields: ['profilePicture'],
-      user: this.clients[clientIndex]
+      user: updatedClient
     };
   }
 
@@ -220,16 +220,16 @@ export class ClientsService {
     }
   }
 
-  deleteClient(id: string): void {
+  async deleteClient(id: string): Promise<void> {
     if (!id || id.trim() === '') {
       throw new BadRequestException('ID do cliente é obrigatório');
     }
 
-    const initialLength = this.clients.length;
-    this.clients = this.clients.filter(client => client.id !== id);
-    
-    if (this.clients.length === initialLength) {
+    const existingClient = await this.userRepository.findById(id);
+    if (!existingClient) {
       throw new NotFoundException(`Cliente com ID ${id} não encontrado`);
     }
+
+    await this.userRepository.softDelete(id);
   }
 }

@@ -1,22 +1,33 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './adapter/controller/clients.controller';
-import { AppService } from './app.service';
+import { ClientsService } from './domain/service/clients.service';
 
 describe('AppController', () => {
   let appController: AppController;
 
   beforeEach(async () => {
+    const mockClientsService = {
+      getClientById: jest.fn(),
+      updateClient: jest.fn(),
+      updateProfilePicture: jest.fn(),
+    };
+
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        {
+          provide: ClientsService,
+          useValue: mockClientsService,
+        },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('AppController', () => {
+    it('should be defined', () => {
+      expect(appController).toBeDefined();
     });
   });
 });

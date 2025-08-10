@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User } from '../../domain/entity';
+import { UserRepository } from '../repository/user.repository';
 
 @Module({
   imports: [
@@ -22,6 +23,13 @@ import { User } from '../../domain/entity';
     }),
     TypeOrmModule.forFeature([User]),
   ],
-  exports: [TypeOrmModule],
+  providers: [
+    UserRepository,
+    {
+      provide: 'USER_REPOSITORY',
+      useClass: UserRepository,
+    },
+  ],
+  exports: [TypeOrmModule, 'USER_REPOSITORY'],
 })
 export class DatabaseModule {}

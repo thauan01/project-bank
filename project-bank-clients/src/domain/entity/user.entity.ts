@@ -20,6 +20,18 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  address?: string;
+
+  @Column({ type: 'varchar', length: 4, nullable: true })
+  agency?: string;
+
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  accountNumber?: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  profilePicture?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

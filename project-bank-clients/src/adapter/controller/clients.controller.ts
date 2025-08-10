@@ -8,7 +8,7 @@ export class AppController {
 
   @Get(':userId')
   async getUserById(@Param('userId') userId: string) {
-    const user = this.clientsService.getClientById(userId);
+    const user = await this.clientsService.getClientById(userId);
 
     // Retorna informações do cliente incluindo dados bancários
     return {
@@ -54,7 +54,7 @@ export class AppController {
     }
 
     // Delega toda a lógica de validação e atualização para o serviço de domínio
-    const result = this.clientsService.updateClient(userId, updateData);
+    const result = await this.clientsService.updateClient(userId, updateData);
 
     // Retorna o resultado do serviço com timestamp atualizado
     return {
@@ -69,7 +69,7 @@ export class AppController {
     @Body('profilePicture') profilePicture: string
   ) {
     // Delega a atualização da foto de perfil para o serviço de domínio
-    const result = this.clientsService.updateProfilePicture(userId, profilePicture);
+    const result = await this.clientsService.updateProfilePicture(userId, profilePicture);
 
     // Retorna o resultado do serviço com timestamp atualizado
     return {
