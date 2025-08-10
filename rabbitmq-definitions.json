@@ -1,0 +1,29 @@
+{
+  "users": [
+    {
+      "name": "admin",
+      "password": "admin",
+      "tags": "administrator",
+      "permissions": [
+        {
+          "vhost": "/",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ]
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "queues": [
+    {
+      "name": "bank-transaction-to-client-queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+  ]
+}
