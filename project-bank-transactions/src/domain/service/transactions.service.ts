@@ -1,53 +1,37 @@
 import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException, Inject } from '@nestjs/common';
-import { TransactionRepository } from '../../adapter/repository/transaction.repository';
-import { UserRepository } from '../../adapter/repository/user.repository';
-import { TransactionRequest } from '../../adapter/dto/transaction-request.dto';
-import { TransactionResponse } from '../../adapter/dto/transaction-response.dto';
-import { TransactionDetailsResponse, TransactionDetails } from '../../adapter/dto/transaction-details.dto';
-import { TransactionListResponse } from '../../adapter/dto/transaction-list.dto';
-import { Transaction, TransactionStatus } from '../entity/transaction.entity';
-import { DI_TRANSACTION_REPOSITORY, DI_USER_REPOSITORY } from '../../config/container-names';
+import { Transaction } from '../entity/transaction.entity';
+import { DI_MESSAGE_PRODUCER_SERVICE, DI_TRANSACTION_REPOSITORY, DI_USER_INTEGRATION_SERVICE } from '../../config/container-names';
+import { 
+  ITransactionRepository, 
+  IUserIntegrationService, 
+  UserApiResponse,
+  TransactionRequestData,
+  TransactionOperationResult,
+  TransactionDetailsData,
+  TransactionDetailsResult,
+  TransactionListResult
+} from '../interface';
+import { TransactionStatus } from '../enum/transaction-status.enum';
+import { IMessageProducer } from '../interface/message-producer.interface';
 
 @Injectable()
 export class TransactionsService {
   constructor(
     @Inject(DI_TRANSACTION_REPOSITORY)
-    private readonly transactionRepository: TransactionRepository,
-    @Inject(DI_USER_REPOSITORY)
-    private readonly userRepository: UserRepository,
+    private readonly transactionRepository: ITransactionRepository,
+    @Inject(DI_USER_INTEGRATION_SERVICE)
+    private readonly userService: IUserIntegrationService,
+    @Inject(DI_MESSAGE_PRODUCER_SERVICE)
+    private readonly messageProducerService: IMessageProducer,
   ) {}
 
-  async createBankTransaction(transactionData: TransactionRequest): Promise<TransactionResponse> {
+  async createBankTransaction(transactionData: TransactionRequestData): Promise<TransactionOperationResult> {
     try {
       // Validações de negócio
       await this.validateTransactionData(transactionData);
 
-      // Verificar se os usuários existem
-      const senderExists = await this.userRepository.exists(transactionData.senderUserId);
-      const receiverExists = await this.userRepository.exists(transactionData.receiverUserId);
-
-      if (!senderExists) {
-        return {
-          status: 'error',
-          message: 'Usuário remetente não encontrado'
-        };
-      }
-
-      if (!receiverExists) {
-        return {
-          status: 'error',
-          message: 'Usuário destinatário não encontrado'
-        };
-      }
-
-      // Verificar saldo do remetente
-      const sender = await this.userRepository.findById(transactionData.senderUserId);
-      if (sender.balance < transactionData.amount) {
-        return {
-          status: 'error',
-          message: 'Saldo insuficiente para realizar a transação'
-        };
-      }
+      // Validar usuários e saldo
+      await this.validateUsersAndBalance(transactionData);
 
       // Criar a transação
       const transaction = await this.transactionRepository.create({
@@ -59,16 +43,15 @@ export class TransactionsService {
       });
 
       // Atualizar saldos dos usuários
-      const receiver = await this.userRepository.findById(transactionData.receiverUserId);
-      await this.userRepository.updateBalance(sender.id, sender.balance - transactionData.amount);
-      await this.userRepository.updateBalance(receiver.id, receiver.balance + transactionData.amount);
+      const messageToClientService = this.mapTransactionToDetails(transaction);
+      await this.messageProducerService.publishTransactionCreated(messageToClientService);
 
       // Atualizar status da transação para COMPLETED
-      await this.transactionRepository.updateStatus(transaction.id, TransactionStatus.COMPLETED);
+      await this.transactionRepository.updateStatus(transaction.transactionId, TransactionStatus.COMPLETED);
 
       return {
         status: 'success',
-        transactionId: transaction.id,
+        transactionId: transaction.transactionId,
         message: 'Transação processada com sucesso'
       };
     } catch (error) {
@@ -80,7 +63,7 @@ export class TransactionsService {
     }
   }
 
-  async getTransactionDetailsById(transactionId: string): Promise<TransactionDetailsResponse> {
+  async getTransactionDetailsById(transactionId: string): Promise<TransactionDetailsResult> {
     try {
       if (!transactionId) {
         return {
@@ -98,13 +81,13 @@ export class TransactionsService {
         };
       }
 
-      const transactionDetails: TransactionDetails = {
-        transactionId: transaction.id,
+      const transactionDetails: TransactionDetailsData = {
+        transactionId: transaction.transactionId,
         senderUserId: transaction.senderUserId,
         receiverUserId: transaction.receiverUserId,
         amount: transaction.amount,
         description: transaction.description,
-        status: transaction.status.toLowerCase(),
+        status: transaction.status,
         createdAt: transaction.createdAt.toISOString()
       };
 
@@ -122,7 +105,7 @@ export class TransactionsService {
     }
   }
 
-  async getTransactionsByUserId(userId: string): Promise<TransactionListResponse> {
+  async getTransactionsByUserId(userId: string): Promise<TransactionListResult> {
     try {
       if (!userId) {
         return {
@@ -132,23 +115,20 @@ export class TransactionsService {
       }
 
       // Verificar se o usuário existe
-      const userExists = await this.userRepository.exists(userId);
+      const userExists = await this.userService.getUserById(userId);
       if (!userExists) {
-        return {
-          status: 'error',
-          message: 'Usuário não encontrado'
-        };
+        throw new BadRequestException('Usuário não encontrado');
       }
 
       const transactions = await this.transactionRepository.findByUserId(userId);
 
-      const transactionsList: TransactionDetails[] = transactions.map(transaction => ({
-        transactionId: transaction.id,
+      const transactionsList: TransactionDetailsData[] = transactions.map(transaction => ({
+        transactionId: transaction.transactionId,
         senderUserId: transaction.senderUserId,
         receiverUserId: transaction.receiverUserId,
         amount: transaction.amount,
         description: transaction.description,
-        status: transaction.status.toLowerCase(),
+        status: transaction.status,
         createdAt: transaction.createdAt.toISOString()
       }));
 
@@ -167,10 +147,31 @@ export class TransactionsService {
     }
   }
 
-  private async validateTransactionData(transactionData: TransactionRequest): Promise<void> {
+  private async validateUsersAndBalance(transactionData: TransactionRequestData): Promise<{ senderUser: UserApiResponse; receiverUser: UserApiResponse }> {
+    // Verificar se os usuários existem
+    const senderUser = await this.userService.getUserById(transactionData.senderUserId);
+    const receiverUser = await this.userService.getUserById(transactionData.receiverUserId);
+
+    if (!senderUser) {
+      throw new NotFoundException('Usuário remetente não encontrado');
+    }
+
+    if (!receiverUser) {
+      throw new NotFoundException('Usuário destinatário não encontrado');
+    }
+
+    // Verificar saldo do remetente
+    if (senderUser.balance < transactionData.amount) {
+      throw new BadRequestException('Saldo insuficiente para realizar a transação');
+    }
+
+    return { senderUser, receiverUser };
+  }
+
+  private async validateTransactionData(transactionData: TransactionRequestData): Promise<void> {
     if (!transactionData.senderUserId || !transactionData.receiverUserId || 
-        !transactionData.amount || !transactionData.description) {
-      throw new BadRequestException('Todos os parâmetros são obrigatórios: senderUserId, receiverUserId, amount, description');
+        !transactionData.amount) {
+      throw new BadRequestException('Os parâmetros são obrigatórios: senderUserId, receiverUserId, amount');
     }
 
     if (transactionData.amount <= 0) {
@@ -180,5 +181,17 @@ export class TransactionsService {
     if (transactionData.senderUserId === transactionData.receiverUserId) {
       throw new BadRequestException('O usuário remetente não pode ser o mesmo que o destinatário');
     }
+  }
+
+  private mapTransactionToDetails(transaction: Transaction): TransactionDetailsData {
+    return {
+      transactionId: transaction.transactionId,
+      senderUserId: transaction.senderUserId,
+      receiverUserId: transaction.receiverUserId,
+      amount: transaction.amount,
+      description: transaction.description,
+      status: transaction.status,
+      createdAt: transaction.createdAt.toISOString()
+    };
   }
 }

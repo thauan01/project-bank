@@ -10,6 +10,7 @@ export class EnvironmentConfig {
     postgresDb = process.env.POSTGRES_DB;
     nodeEnv = process.env.NODE_ENV;
     baseUrl = process.env.BASE_URL;
+    rabbitMqQueue = process.env.RABBITMQ_QUEUE;
 }
 
 export const environmentConfig = new EnvironmentConfig();

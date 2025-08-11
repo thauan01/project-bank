@@ -4,9 +4,10 @@ import { BankTransactionsController } from './adapter/controller/bank-transactio
 import { DatabaseModule } from './adapter/database/database.module';
 import { TransactionsService } from './domain/service/transactions.service';
 import { TransactionRepository } from './adapter/repository/transaction.repository';
-import { UserRepository } from './adapter/repository/user.repository';
+import { UserService } from './adapter/integration/user.service';
+import { MessageProducerService } from './adapter/integration/message-producer.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { DI_TRANSACTION_REPOSITORY, DI_USER_REPOSITORY } from './config/container-names';
+import { DI_TRANSACTION_REPOSITORY, DI_USER_INTEGRATION_SERVICE } from './config/container-names';
 
 @Module({
   imports: [
@@ -32,8 +33,9 @@ import { DI_TRANSACTION_REPOSITORY, DI_USER_REPOSITORY } from './config/containe
   controllers: [BankTransactionsController],
   providers: [
     TransactionsService,
+    MessageProducerService,
     {provide: DI_TRANSACTION_REPOSITORY, useClass: TransactionRepository},
-    {provide: DI_USER_REPOSITORY, useClass: UserRepository},
+    {provide: DI_USER_INTEGRATION_SERVICE, useClass: UserService},
   ],
 })
 export class AppModule {}
