@@ -1,2 +1,2 @@
 export { User } from './user.entity';
-export { Transaction, TransactionStatus } from './transaction.entity';
+export { Transaction } from './transaction.entity';

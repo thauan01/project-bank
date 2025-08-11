@@ -7,7 +7,7 @@ import { TransactionRepository } from './adapter/repository/transaction.reposito
 import { UserService } from './adapter/integration/user.service';
 import { MessageProducerService } from './adapter/integration/message-producer.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { DI_TRANSACTION_REPOSITORY, DI_USER_INTEGRATION_SERVICE } from './config/container-names';
+import { DI_MESSAGE_PRODUCER_SERVICE, DI_TRANSACTION_REPOSITORY, DI_USER_INTEGRATION_SERVICE } from './config/container-names';
 
 @Module({
   imports: [
@@ -36,6 +36,7 @@ import { DI_TRANSACTION_REPOSITORY, DI_USER_INTEGRATION_SERVICE } from './config
     MessageProducerService,
     {provide: DI_TRANSACTION_REPOSITORY, useClass: TransactionRepository},
     {provide: DI_USER_INTEGRATION_SERVICE, useClass: UserService},
+    {provide: DI_MESSAGE_PRODUCER_SERVICE, useClass: MessageProducerService},
   ],
 })
 export class AppModule {}

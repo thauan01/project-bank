@@ -1,8 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert } from 'typeorm';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({ type: 'varchar', length: 4 })
   id: string;
 
   @Column({ type: 'varchar', length: 100 })
@@ -37,4 +37,12 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) {
+      // Gera um número aleatório de 4 dígitos (1000-9999)
+      this.id = Math.floor(1000 + Math.random() * 9000).toString();
+    }
+  }
 }

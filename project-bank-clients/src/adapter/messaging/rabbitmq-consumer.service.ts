@@ -11,6 +11,7 @@ export class RabbitMQConsumerService {
   /**
    * Processa mensagens de transações bancárias para atualizar saldos dos clientes
    * Padrão: { userId: string, amount: number, transactionType: 'credit' | 'debit', transactionId: string }
+   * Ou formato de transação completa: { senderUserId: string, receiverUserId: string, amount: number, transactionId: string, status: string }
    */
   @EventPattern('transaction.processed')
   async handleTransactionProcessed(
@@ -23,43 +24,8 @@ export class RabbitMQConsumerService {
     try {
       this.logger.log(`Processando transação: ${JSON.stringify(data)}`);
 
-      const { userId, amount, transactionType, transactionId } = data;
 
-      // Validação básica dos dados
-      if (!userId || !amount || !transactionType || !transactionId) {
-        this.logger.error('Dados da transação inválidos:', data);
-        // Reject da mensagem em caso de dados inválidos
-        channel.reject(originalMsg, false);
-        return;
-      }
-
-      // Busca o cliente para verificar se existe
-      const client = await this.clientsService.getClientById(userId);
-      if (!client) {
-        this.logger.error(`Cliente não encontrado: ${userId}`);
-        // Reject da mensagem se cliente não existir
-        channel.reject(originalMsg, false);
-        return;
-      }
-
-      // Calcula o novo saldo baseado no tipo de transação
-      let newBalance = client.balance || 0;
-      if (transactionType === 'credit') {
-        newBalance += amount;
-      } else if (transactionType === 'debit') {
-        newBalance -= amount;
-      } else {
-        this.logger.error(`Tipo de transação inválido: ${transactionType}`);
-        channel.reject(originalMsg, false);
-        return;
-      }
-
-      // Atualiza o saldo do cliente
-      await this.clientsService.updateClient(userId, { balance: newBalance });
-
-      this.logger.log(
-        `Saldo atualizado para cliente ${userId}: ${client.balance} -> ${newBalance}`,
-      );
+      await this.processTransferTransaction(data, channel, originalMsg);
 
       // Confirma o processamento da mensagem
       channel.ack(originalMsg);
@@ -73,42 +39,57 @@ export class RabbitMQConsumerService {
     }
   }
 
-  /**
-   * Processa mensagens de criação de conta bancária
-   * Padrão: { userId: string, agency?: string, accountNumber?: string }
-   */
-  @EventPattern('account.created')
-  async handleAccountCreated(
-    @Payload() data: any,
-    @Ctx() context: RmqContext,
-  ) {
-    const channel = context.getChannelRef();
-    const originalMsg = context.getMessage();
+  private async processTransferTransaction(data: any, channel: any, originalMsg: any): Promise<void> {
+    const { senderUserId, receiverUserId, amount, transactionId, status } = data;
 
-    try {
-      this.logger.log(`Processando criação de conta: ${JSON.stringify(data)}`);
-
-      const { userId, agency, accountNumber } = data;
-
-      if (!userId) {
-        this.logger.error('UserId é obrigatório para criação de conta');
-        channel.reject(originalMsg, false);
-        return;
-      }
-
-      // Atualiza os dados bancários do cliente
-      const updateData: any = {};
-      if (agency) updateData.agency = agency;
-      if (accountNumber) updateData.accountNumber = accountNumber;
-
-      await this.clientsService.updateClient(userId, updateData);
-
-      this.logger.log(`Dados bancários atualizados para cliente ${userId}`);
-      channel.ack(originalMsg);
-
-    } catch (error) {
-      this.logger.error('Erro ao processar criação de conta:', error);
-      channel.nack(originalMsg, false, true);
+    // Validação básica dos dados
+    if (!senderUserId || !receiverUserId || !amount || !transactionId) {
+      this.logger.error('Dados da transação de transferência inválidos:', data);
+      channel.reject(originalMsg, false);
+      return;
     }
+
+    // Verifica se a transação foi bem-sucedida
+    if (status && status !== 'success') {
+      this.logger.warn(`Transação ${transactionId} falhou. Status: ${status}`);
+      return;
+    }
+
+    // Busca o usuário remetente
+    const sender = await this.clientsService.getClientById(senderUserId);
+    if (!sender) {
+      this.logger.error(`Usuário remetente não encontrado: ${senderUserId}`);
+      channel.reject(originalMsg, false);
+      return;
+    }
+
+    // Busca o usuário destinatário
+    const receiver = await this.clientsService.getClientById(receiverUserId);
+    if (!receiver) {
+      this.logger.error(`Usuário destinatário não encontrado: ${receiverUserId}`);
+      channel.reject(originalMsg, false);
+      return;
+    }
+
+    // Calcula os novos saldos
+    const newSenderBalance = sender.balance - amount;
+    const newReceiverBalance = receiver.balance + amount;
+
+    // Verifica se o remetente tem saldo suficiente (validação adicional)
+    if (newSenderBalance < 0) {
+      this.logger.error(`Saldo insuficiente para o usuário ${senderUserId}. Saldo atual: ${sender.balance}, Valor da transação: ${amount}`);
+      channel.reject(originalMsg, false);
+      return;
+    }
+
+    // Atualiza o saldo do remetente
+    await this.clientsService.updateClient(senderUserId, { balance: newSenderBalance } as any);
+
+    // Atualiza o saldo do destinatário
+    await this.clientsService.updateClient(receiverUserId, { balance: newReceiverBalance } as any);
+
+    this.logger.log(`Transferência ${transactionId} processada com sucesso`);
+    this.logger.log(`Remetente ${senderUserId}: ${sender.balance} -> ${newSenderBalance}`);
+    this.logger.log(`Destinatário ${receiverUserId}: ${receiver.balance} -> ${newReceiverBalance}`);
   }
 }

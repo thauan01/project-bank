@@ -11,53 +11,24 @@ export class ClientsService {
   ) {}
 
   async createClient(createData: UserData): Promise<OperationResult> {
-    // Validação dos dados obrigatórios
-    if (!createData.name || createData.name.trim() === '') {
-      throw new BadRequestException('Nome é obrigatório');
-    }
-    
-    if (!createData.email || createData.email.trim() === '') {
-      throw new BadRequestException('Email é obrigatório');
-    }
-    
-    if (!createData.document || createData.document.trim() === '') {
-      throw new BadRequestException('Documento é obrigatório');
-    }
-
     // Validações de regras de negócio
     this.validateCreateData(createData);
 
-    // Verifica se email já existe
-    const emailExists = await this.userRepository.findByEmail(createData.email);
-    if (emailExists) {
-      throw new BadRequestException('Este email já está sendo usado por outro cliente');
-    }
-
-    // Verifica se documento já existe
-    const documentExists = await this.userRepository.findByDocument(createData.document);
-    if (documentExists) {
-      throw new BadRequestException('Este documento já está sendo usado por outro cliente');
-    }
+    await this.validateDuplicateData(createData);
 
     // Define valores padrão para dados bancários se não fornecidos
     const userData: Partial<User> = {
       ...createData,
       balance: 0,
       isActive: true,
-      agency: createData.bankingDetails.agency || '0001'
+      agency: createData?.bankingDetails?.agency || '0001'
     };
-
-    // Se não foi fornecido accountNumber, será gerado automaticamente pelo banco
-    if (!createData.bankingDetails.accountNumber) {
-      // O accountNumber será gerado após a criação usando o ID
-      delete userData.accountNumber;
-    }
 
     // Cria o cliente
     const newClient = await this.userRepository.create(userData);
     
     // Se não foi fornecido accountNumber, atualiza com um baseado no ID
-    if (!createData.bankingDetails.accountNumber && newClient.id) {
+    if (!createData?.bankingDetails?.accountNumber && newClient.id) {
       const generatedAccountNumber = newClient.id.slice(-8).padStart(8, '0');
       const updatedClient = await this.userRepository.update(newClient.id, { 
         accountNumber: generatedAccountNumber 
@@ -113,21 +84,7 @@ export class ClientsService {
     // Validações de regras de negócio
     this.validateUpdateData(updateData);
 
-    // Verifica se email já existe em outro cliente
-    if (updateData.email) {
-      const emailExists = await this.userRepository.findByEmail(updateData.email);
-      if (emailExists && emailExists.id !== id) {
-        throw new BadRequestException('Este email já está sendo usado por outro cliente');
-      }
-    }
-
-    // Verifica se documento já existe em outro cliente
-    if (updateData.document) {
-      const documentExists = await this.userRepository.findByDocument(updateData.document);
-      if (documentExists && documentExists.id !== id) {
-        throw new BadRequestException('Este documento já está sendo usado por outro cliente');
-      }
-    }
+    await this.validateDuplicateData(updateData);
 
     // Atualiza o cliente
     const updatedClient = await this.userRepository.update(id, updateData);
@@ -202,38 +159,14 @@ export class ClientsService {
     }
 
     // Validação do documento
-    if (updateData.document !== undefined) {
-      if (!updateData.document || updateData.document.trim().length < 11) {
-        throw new BadRequestException('Documento deve ter pelo menos 11 caracteres');
-      }
-      if (updateData.document.length > 20) {
-        throw new BadRequestException('Documento não pode ter mais de 20 caracteres');
-      }
-      // Remove caracteres não numéricos para validação
-      const documentNumbers = updateData.document.replace(/\D/g, '');
-      if (documentNumbers.length < 11) {
-        throw new BadRequestException('Documento deve conter pelo menos 11 dígitos');
-      }
+    if (updateData.document.length > 20) {
+      throw new BadRequestException('Documento não pode ter mais de 20 caracteres');
     }
 
     // Validação do endereço
     if (updateData.address !== undefined) {
       if (updateData.address && updateData.address.length > 255) {
         throw new BadRequestException('Endereço não pode ter mais de 255 caracteres');
-      }
-    }
-
-    // Validação da agência
-    if (updateData.bankingDetails?.agency !== undefined) {
-      if (updateData.bankingDetails.agency && !/^\d{4}$/.test(updateData.bankingDetails.agency)) {
-        throw new BadRequestException('Agência deve conter exatamente 4 dígitos');
-      }
-    }
-
-    // Validação do número da conta
-    if (updateData.bankingDetails?.accountNumber !== undefined) {
-      if (updateData.bankingDetails.accountNumber && !/^\d{6,12}$/.test(updateData.bankingDetails.accountNumber)) {
-        throw new BadRequestException('Número da conta deve conter entre 6 e 12 dígitos');
       }
     }
 
@@ -268,25 +201,10 @@ export class ClientsService {
     if (createData.document.length > 20) {
       throw new BadRequestException('Documento não pode ter mais de 20 caracteres');
     }
-    // Remove caracteres não numéricos para validação
-    const documentNumbers = createData.document.replace(/\D/g, '');
-    if (documentNumbers.length < 11) {
-      throw new BadRequestException('Documento deve conter pelo menos 11 dígitos');
-    }
 
     // Validação do endereço
     if (createData.address !== undefined && createData.address && createData.address.length > 255) {
       throw new BadRequestException('Endereço não pode ter mais de 255 caracteres');
-    }
-
-    // Validação da agência
-    if (createData.bankingDetails?.agency !== undefined && createData.bankingDetails?.agency && !/^\d{4}$/.test(createData.bankingDetails?.agency)) {
-      throw new BadRequestException('Agência deve conter exatamente 4 dígitos');
-    }
-
-    // Validação do número da conta
-    if (createData.bankingDetails?.accountNumber !== undefined && createData.bankingDetails?.accountNumber && !/^\d{6,12}$/.test(createData.bankingDetails?.accountNumber)) {
-      throw new BadRequestException('Número da conta deve conter entre 6 e 12 dígitos');
     }
 
     // Validação da foto de perfil, se fornecida
@@ -358,5 +276,19 @@ export class ClientsService {
     }
 
     await this.userRepository.softDelete(id);
+  }
+
+  private async validateDuplicateData(createData: UserData): Promise<void> {
+    // Verifica se email já existe
+    const emailExists = await this.userRepository.findByEmail(createData.email);
+    if (emailExists) {
+      throw new BadRequestException('Este email já está sendo usado por outro cliente');
+    }
+
+    // Verifica se documento já existe
+    const documentExists = await this.userRepository.findByDocument(createData.document);
+    if (documentExists) {
+      throw new BadRequestException('Este documento já está sendo usado por outro cliente');
+    }
   }
 }

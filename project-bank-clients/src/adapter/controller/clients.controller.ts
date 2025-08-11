@@ -57,6 +57,12 @@ export class ClientsController {
       document: userDto.document
     };
 
+    if( userDto.balance !== undefined) {
+      createData.balance = userDto.balance;
+    } else {
+      createData.balance = 0;
+    }
+
     if (userDto.address !== undefined) {
       createData.address = userDto.address;
     }

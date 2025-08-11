@@ -1,16 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule } from '@nestjs/microservices';
 import { RabbitMQConsumerService } from './rabbitmq-consumer.service';
-import { RabbitMQPublisherService } from './rabbitmq-publisher.service';
 import { ClientsService } from '../../domain/service/clients.service';
-import { UserRepository } from '../repository/user.repository';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from '../../domain/entity/user.entity';
+import { DatabaseModule } from '../database/database.module';
 import { getRabbitMQConfig, RABBITMQ_SERVICE } from '../../config/rabbitmq.config';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    DatabaseModule,
     ClientsModule.register([
       {
         name: RABBITMQ_SERVICE,
@@ -20,10 +17,8 @@ import { getRabbitMQConfig, RABBITMQ_SERVICE } from '../../config/rabbitmq.confi
   ],
   providers: [
     RabbitMQConsumerService,
-    RabbitMQPublisherService,
     ClientsService,
-    UserRepository,
   ],
-  exports: [RabbitMQConsumerService, RabbitMQPublisherService],
+  exports: [RabbitMQConsumerService, ClientsService],
 })
 export class RabbitMQModule {}
