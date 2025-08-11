@@ -1,17 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { User } from './user.entity';
-
-export enum TransactionStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED'
-}
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { TransactionStatus } from '../enum/transaction-status.enum';
 
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  transactionId: string;
 
   @Column({ type: 'uuid' })
   senderUserId: string;
@@ -34,15 +27,4 @@ export class Transaction {
 
   @CreateDateColumn()
   createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
-
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'senderUserId' })
-  sender: User;
-
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'receiverUserId' })
-  receiver: User;
 }

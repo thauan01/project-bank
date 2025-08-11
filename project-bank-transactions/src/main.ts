@@ -9,16 +9,16 @@ async function bootstrap() {
     app.enableCors();
 
     const config = new DocumentBuilder()
-    .setTitle('URL_Shortener API')
-    .setDescription('Greater shortener and management of URLs')
+    .setTitle('Project Bank - Transactions API')
+    .setDescription('API for managing bank transactions')
     .setVersion('1.0')
-    .addTag('endpoints') // opcional
+    .addTag('transactions')
     .build();
   
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.TRANSACTIONS_SERVICE_PORT || process.env.PORT || 3002;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
 }

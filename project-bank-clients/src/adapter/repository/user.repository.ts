@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../../domain/entity/user.entity';
+import { User } from '../../domain/entity';
+import { IUserRepository } from '../../domain/interface';
 
 @Injectable()
-export class UserRepository {
+export class UserRepository implements IUserRepository {
   constructor(
     @InjectRepository(User)
     private readonly repository: Repository<User>,
@@ -12,7 +13,26 @@ export class UserRepository {
 
   async create(userData: Partial<User>): Promise<User> {
     const user = this.repository.create(userData);
+    
+    // Gera um ID único de 4 dígitos se não foi fornecido
+    if (!user.id) {
+      user.id = await this.generateUniqueId();
+    }
+    
     return await this.repository.save(user);
+  }
+
+  private async generateUniqueId(): Promise<string> {
+    let id: string;
+    let exists: boolean;
+    
+    do {
+      // Gera um número aleatório de 4 dígitos (1000-9999)
+      id = Math.floor(1000 + Math.random() * 9000).toString();
+      exists = await this.repository.exist({ where: { id } });
+    } while (exists);
+    
+    return id;
   }
 
   async findById(id: string): Promise<User | null> {

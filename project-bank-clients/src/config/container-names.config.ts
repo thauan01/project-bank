@@ -1,0 +1,1 @@
+export const DI_USER_REPOSITORY = 'DI_USER_REPOSITORY';

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Transaction, TransactionStatus } from '../../domain/entity/transaction.entity';
+import { Transaction } from '../../domain/entity/transaction.entity';
+import { TransactionStatus } from '../../domain/enum/transaction-status.enum';
 
 @Injectable()
 export class TransactionRepository {
@@ -17,7 +18,7 @@ export class TransactionRepository {
 
   async findById(id: string): Promise<Transaction | null> {
     return await this.repository.findOne({
-      where: { id },
+      where: { transactionId: id },
       relations: ['sender', 'receiver']
     });
   }
@@ -86,7 +87,7 @@ export class TransactionRepository {
 
   async exists(id: string): Promise<boolean> {
     const count = await this.repository.count({ 
-      where: { id } 
+      where: { transactionId: id } 
     });
     return count > 0;
   }

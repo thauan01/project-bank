@@ -1,4 +1,5 @@
-import { Transaction, TransactionStatus } from '../entity/transaction.entity';
+import { Transaction } from '../entity/transaction.entity';
+import { TransactionStatus } from '../enum/transaction-status.enum';
 
 export interface ITransactionRepository {
   create(transactionData: Partial<Transaction>): Promise<Transaction>;
