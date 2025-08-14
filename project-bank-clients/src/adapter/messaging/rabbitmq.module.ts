@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule } from '@nestjs/microservices';
 import { RabbitMQConsumerService } from './rabbitmq-consumer.service';
+import { RabbitMQHealthService } from './rabbitmq-health.service';
 import { ClientsService } from '../../domain/service/clients.service';
 import { DatabaseModule } from '../database/database.module';
 import { getRabbitMQConfig, RABBITMQ_SERVICE } from '../../config/rabbitmq.config';
@@ -17,8 +18,13 @@ import { getRabbitMQConfig, RABBITMQ_SERVICE } from '../../config/rabbitmq.confi
   ],
   providers: [
     RabbitMQConsumerService,
+    RabbitMQHealthService,
     ClientsService,
   ],
-  exports: [RabbitMQConsumerService, ClientsService],
+  exports: [
+    RabbitMQConsumerService, 
+    RabbitMQHealthService,
+    ClientsService
+  ],
 })
 export class RabbitMQModule {}

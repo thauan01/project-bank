@@ -9,11 +9,18 @@ export const getRabbitMQConfig = (): RmqOptions => {
       queueOptions: {
         durable: true,
       },
-      // Configurações de reconexão automática
+      // Configurações melhoradas de conexão
       socketOptions: {
-        heartbeatIntervalInSeconds: 60,
-        reconnectTimeInSeconds: 5,
+        heartbeatIntervalInSeconds: 30, // Reduzido para detectar problemas mais rápido
+        reconnectTimeInSeconds: 3,
+        clientProperties: {
+          connection_name: 'bank-clients-service',
+        },
       },
+      // Configurações de qualidade de serviço
+      prefetchCount: 10, // Processa até 10 mensagens simultaneamente
+      // Retry policy
+      noAck: false, // Garante acknowledgment manual
     },
   };
 };

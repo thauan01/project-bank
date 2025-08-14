@@ -3,19 +3,30 @@
     {
       "name": "admin",
       "password": "admin",
-      "tags": "administrator",
-      "permissions": [
-        {
-          "vhost": "/",
-          "configure": ".*",
-          "write": ".*",
-          "read": ".*"
-        }
-      ]
+      "tags": "administrator"
     }
   ],
   "vhosts": [
     { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "bank-transactions-dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
   ],
   "queues": [
     {
@@ -25,5 +36,22 @@
       "auto_delete": false,
       "arguments": {}
     },
+    {
+      "name": "bank-transaction-to-client-queue.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "bank-transactions-dlx",
+      "vhost": "/",
+      "destination": "bank-transaction-to-client-queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "failed",
+      "arguments": {}
+    }
   ]
 }
